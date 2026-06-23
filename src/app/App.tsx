@@ -367,13 +367,18 @@ export default function App() {
   const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
   const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
 
-  function addToCart(category: string, itemName: string, priceStr: string) {
+  function addToCart(
+    category: string,
+    itemName: string,
+    priceStr: string,
+    overrideKey?: string,
+  ) {
     const sizeOpts = getSizeOptions(category, priceStr);
     let size: string | null = null;
     let price = 0;
 
     if (sizeOpts) {
-      const key = `${category}__${itemName}`;
+      const key = overrideKey ?? `${category}__${itemName}`; // ← yahan change
       const chosen = selectedSizes[key];
       if (!chosen) {
         alert('Please select a size first!');
@@ -1648,7 +1653,12 @@ export default function App() {
                     <button
                       className="bb-btn"
                       onClick={() =>
-                        addToCart(item.cartCategory, item.name, item.cartPrice)
+                        addToCart(
+                          item.cartCategory,
+                          item.name,
+                          item.cartPrice,
+                          cardKey,
+                        )
                       }
                       style={{
                         ...btnRed,
