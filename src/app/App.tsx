@@ -393,8 +393,16 @@ export default function App() {
     animation: float 4s ease-in-out infinite;
   }
 
-  .bb-fall {
-    animation: fallDown 1.8s cubic-bezier(0.22, 1, 0.36, 1);
+  .big-drop {
+    display: block;
+    animation: fallDown 1.2s cubic-bezier(0.22,1,0.36,1) forwards;
+  }
+
+  .bite-drop {
+    display: block;
+    opacity: 0;
+    animation: fallDown 1.2s cubic-bezier(0.22,1,0.36,1) forwards;
+    animation-delay: 0.5s;
   }
 
   .bb-card:hover {
@@ -443,11 +451,7 @@ export default function App() {
     display: flex;
     align-items: flex-end;
     padding: 18px 20px;
-    background: linear-gradient(
-      to top,
-      rgba(0,0,0,0.65),
-      transparent
-    );
+    background: linear-gradient(to top, rgba(0,0,0,0.65), transparent);
     pointer-events: none;
   }
 
@@ -680,7 +684,6 @@ export default function App() {
               </div>
 
               <h1
-                className="bb-fall"
                 style={{
                   fontFamily: "'Bebas Neue', sans-serif",
                   fontSize: 'clamp(90px, 12vw, 200px)',
@@ -690,9 +693,10 @@ export default function App() {
                   fontWeight: 400,
                 }}
               >
-                BIG
-                <br />
+                <span className="big-drop">BIG</span>
+
                 <span
+                  className="bite-drop"
                   style={{
                     color: '#ff2b3d',
                     textShadow: '0 0 40px rgba(255,43,61,0.4)',
