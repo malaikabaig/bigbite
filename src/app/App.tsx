@@ -1960,7 +1960,7 @@ export default function App() {
                   </h4>
 
                   <a
-                    href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z"
+                    href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z/data=!4m6!3m5!1s0x392269609357341f:0xc4eb2e1a3795daa0!8m2!3d31.4363317!4d73.1128357!16s%2Fg%2F11ffvt2qdw?entry=ttu&g_ep=EgoyMDI2MDYyMS4wIKXMDSoASAFQAw%3D%3D"
                     target="_blank"
                     rel="noreferrer"
                     style={{
@@ -2297,7 +2297,7 @@ export default function App() {
             <span>🕒 Open Daily: 12 PM - 2 AM</span>
 
             <a
-              href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z"
+              href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z/data=!4m6!3m5!1s0x392269609357341f:0xc4eb2e1a3795daa0!8m2!3d31.4363317!4d73.1128357!16s%2Fg%2F11ffvt2qdw?entry=ttu&g_ep=EgoyMDI2MDYyMS4wIKXMDSoASAFQAw%3D%3D"
               target="_blank"
               rel="noreferrer"
               style={{
@@ -2440,7 +2440,7 @@ export default function App() {
               }}
             >
               <a
-                href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z"
+                href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z/data=!4m6!3m5!1s0x392269609357341f:0xc4eb2e1a3795daa0!8m2!3d31.4363317!4d73.1128357!16s%2Fg%2F11ffvt2qdw?entry=ttu&g_ep=EgoyMDI2MDYyMS4wIKXMDSoASAFQAw%3D%3D"
                 target="_blank"
                 rel="noreferrer"
                 style={footerLink}
