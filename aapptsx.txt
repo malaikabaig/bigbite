@@ -1584,3 +1584,102 @@ export default function App() {
     </div>
   );
 }
+
+
+<section
+  style={{
+    maxWidth: '1200px',
+    margin: '0 auto',
+    padding: '100px 24px',
+  }}
+>
+  <div style={{ textAlign: 'center', marginBottom: '60px' }}>
+    <p
+      style={{
+        color: '#ff2b3d',
+        textTransform: 'uppercase',
+        letterSpacing: '2px',
+        fontSize: '14px',
+      }}
+    >
+      Customer Reviews
+    </p>
+
+    <h2
+      style={{
+        fontFamily: "'Bebas Neue', sans-serif",
+        fontSize: 'clamp(40px, 6vw, 80px)',
+        margin: '10px 0',
+      }}
+    >
+      WHAT OUR CUSTOMERS SAY
+    </h2>
+
+    <p
+      style={{
+        color: 'rgba(255,255,255,0.7)',
+      }}
+    >
+      Real feedback from our happy customers.
+    </p>
+  </div>
+
+  <div
+    style={{
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit,minmax(280px,1fr))',
+      gap: '24px',
+    }}
+  >
+    {[
+      {
+        name: 'Ahmed R.',
+        review:
+          'Best pizza I have had in Faisalabad. Fresh ingredients and quick delivery.',
+      },
+      {
+        name: 'Sana K.',
+        review:
+          'The burgers are juicy, the fries are crispy, and everything arrives hot.',
+      },
+      {
+        name: 'Usman A.',
+        review:
+          'Ordered for a family gathering. Great taste, great service, and on-time delivery.',
+      },
+    ].map((item, i) => (
+      <div
+        key={i}
+        style={{
+          background: 'rgba(255,255,255,0.03)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: '24px',
+          padding: '28px',
+          backdropFilter: 'blur(10px)',
+        }}
+      >
+        <div
+          style={{
+            color: '#ff2b3d',
+            fontSize: '22px',
+            marginBottom: '16px',
+          }}
+        >
+          ★★★★★
+        </div>
+
+        <p
+          style={{
+            color: 'rgba(255,255,255,0.8)',
+            lineHeight: 1.8,
+            marginBottom: '20px',
+          }}
+        >
+          "{item.review}"
+        </p>
+
+        <strong>{item.name}</strong>
+      </div>
+    ))}
+  </div>
+</section>

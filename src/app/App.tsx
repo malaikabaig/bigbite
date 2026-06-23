@@ -16,9 +16,78 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import deliveryVideo from '../imports/delivery.mp4';
+import {
+  FaFacebookF,
+  FaInstagram,
+  FaTiktok,
+  FaGlobe,
+  FaWhatsapp,
+} from 'react-icons/fa';
 
 const WHATSAPP =
   'https://wa.me/923137788169?text=Hi%20BigBite!%20I%20want%20to%20place%20an%20order.';
+
+// ─────────────────────────────────────────────
+// CART TYPES
+// ─────────────────────────────────────────────
+interface SizeOption {
+  label: string;
+  price: number;
+}
+
+interface CartItem {
+  id: string; // unique key: `${name}__${size}`
+  name: string;
+  category: string;
+  size: string | null;
+  price: number;
+  qty: number;
+}
+
+// ─────────────────────────────────────────────
+// PRICE PARSING HELPERS
+// ─────────────────────────────────────────────
+
+/** Returns size options for categories that have multiple sizes.
+ *  Returns null for single-price items. */
+function getSizeOptions(
+  category: string,
+  priceStr: string,
+): SizeOption[] | null {
+  const isPizza =
+    category === 'Classic Pizzas' || category === 'Special Pizzas';
+  const isFries = category === 'Fries';
+  const isPasta = category === 'Pastas';
+
+  if (!isPizza && !isFries && !isPasta) return null;
+
+  const parts = priceStr.split('/').map((p) => p.trim().replace(/[^0-9]/g, ''));
+
+  if (isPizza) {
+    // Up to 4 sizes: S M L XL — some items only have 3 (stuffed crust) or 2 (square)
+    const labels = ['S', 'M', 'L', 'XL'];
+    return parts.map((p, i) => ({
+      label: labels[i] ?? `Size ${i + 1}`,
+      price: Number(p),
+    }));
+  }
+
+  if (isFries || isPasta) {
+    const labels = ['R', 'L'];
+    return parts.map((p, i) => ({
+      label: labels[i] ?? `Size ${i + 1}`,
+      price: Number(p),
+    }));
+  }
+
+  return null;
+}
+
+/** Parse a single numeric price from strings like "Rs 230" or "230". */
+function parseSinglePrice(priceStr: string): number {
+  const n = priceStr.replace(/[^0-9]/g, '');
+  return Number(n) || 0;
+}
 
 const deals = [
   {
@@ -182,36 +251,49 @@ const bestSellers = [
     name: 'Big Bite Special Pizza',
     desc: 'Our signature masterpiece with premium toppings and layers of flavor.',
     price: 'Rs 430+',
+    // cartPrice: price string used by getSizeOptions — matches Special Pizzas entry
+    cartCategory: 'Special Pizzas',
+    cartPrice: '430 / 780 / 1150 / 1499',
     img: 'https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=400&h=260&fit=crop&auto=format',
   },
   {
     name: 'Chicken Supreme Pizza',
     desc: 'Juicy chicken with supreme sauce and a blanket of melted cheese.',
     price: 'Rs 430+',
+    cartCategory: 'Special Pizzas',
+    cartPrice: '430 / 780 / 1150 / 1499',
     img: 'https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400&h=260&fit=crop&auto=format',
   },
   {
     name: 'Zinger Burger',
     desc: 'Crispy zinger fillet, fresh lettuce, and our secret sauce.',
     price: 'Rs 350',
+    cartCategory: 'Burgers',
+    cartPrice: 'Rs 350',
     img: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=260&fit=crop&auto=format',
   },
   {
     name: 'Dynamite Burger',
     desc: 'Stacked high with fiery dynamite sauce and every fix-in.',
     price: 'Rs 450',
+    cartCategory: 'Burgers',
+    cartPrice: 'Rs 450',
     img: 'https://images.unsplash.com/photo-1586816001966-79b736744398?w=400&h=260&fit=crop&auto=format',
   },
   {
     name: 'Loaded Fries',
     desc: 'Crispy fries piled with cheese, sauces, and toppings galore.',
     price: 'Rs 350+',
+    cartCategory: 'Fries',
+    cartPrice: '350 / 550',
     img: 'https://images.unsplash.com/photo-1630384060421-cb20d0e0649d?w=400&h=260&fit=crop&auto=format',
   },
   {
     name: 'Chicken Shawarma',
     desc: 'Fresh-rolled with grilled chicken and signature garlic sauce.',
     price: 'Rs 190',
+    cartCategory: 'Rolls & Shawarma',
+    cartPrice: 'Rs 190',
     img: 'https://images.unsplash.com/photo-1529006557810-274b9b2fc783?w=400&h=260&fit=crop&auto=format',
   },
 ];
@@ -273,6 +355,77 @@ export default function App() {
   const [scrolled, setScrolled] = useState(false);
   const categories = Object.keys(menuData);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ─── CART STATE ───
+  const [cart, setCart] = useState<CartItem[]>([]);
+  const [cartOpen, setCartOpen] = useState(false);
+  /** Tracks which size is selected per menu card: key = `${category}__${itemName}` */
+  const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>(
+    {},
+  );
+
+  const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
+  const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+
+  function addToCart(category: string, itemName: string, priceStr: string) {
+    const sizeOpts = getSizeOptions(category, priceStr);
+    let size: string | null = null;
+    let price = 0;
+
+    if (sizeOpts) {
+      const key = `${category}__${itemName}`;
+      const chosen = selectedSizes[key];
+      if (!chosen) {
+        alert('Please select a size first!');
+        return;
+      }
+      const opt = sizeOpts.find((o) => o.label === chosen);
+      if (!opt) return;
+      size = chosen;
+      price = opt.price;
+    } else {
+      price = parseSinglePrice(priceStr);
+    }
+
+    const id = `${itemName}__${size ?? 'single'}`;
+    setCart((prev) => {
+      const existing = prev.find((c) => c.id === id);
+      if (existing) {
+        return prev.map((c) => (c.id === id ? { ...c, qty: c.qty + 1 } : c));
+      }
+      return [...prev, { id, name: itemName, category, size, price, qty: 1 }];
+    });
+  }
+
+  function changeQty(id: string, delta: number) {
+    setCart((prev) =>
+      prev
+        .map((c) => (c.id === id ? { ...c, qty: c.qty + delta } : c))
+        .filter((c) => c.qty > 0),
+    );
+  }
+
+  function removeItem(id: string) {
+    setCart((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  function buildWhatsAppMessage(): string {
+    if (cart.length === 0) return '';
+    let msg = '🍔 *BIG BITE ORDER*\n\n';
+    cart.forEach((item) => {
+      const sizeStr = item.size ? ` (${item.size})` : '';
+      msg += `• ${item.name}${sizeStr} x${item.qty} — Rs ${(item.price * item.qty).toLocaleString()}\n`;
+    });
+    msg += `\n*Total: Rs ${cartTotal.toLocaleString()}*\n\n`;
+    msg += 'Customer Name:\nCustomer Phone:\n\nPlease confirm my order.';
+    return msg;
+  }
+
+  function orderOnWhatsApp() {
+    const msg = buildWhatsAppMessage();
+    const url = `https://wa.me/923137788169?text=${encodeURIComponent(msg)}`;
+    window.open(url, '_blank');
+  }
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 50);
@@ -351,6 +504,24 @@ export default function App() {
     fontWeight: 400,
     lineHeight: 1,
     margin: 0,
+  };
+
+  const socialStyle = {
+    width: '48px',
+    height: '48px',
+    borderRadius: '50%',
+    background: 'rgba(255,255,255,.05)',
+    border: '1px solid rgba(255,255,255,.06)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#fff',
+    textDecoration: 'none',
+  };
+
+  const footerLink = {
+    color: 'rgba(255,255,255,.7)',
+    textDecoration: 'none',
   };
 
   return (
@@ -676,7 +847,7 @@ export default function App() {
                   color: '#d8b96d',
                   fontSize: 11,
                   letterSpacing: 4,
-                  // marginBottom: 32,
+                  marginBottom: 32,
                   fontWeight: 700,
                 }}
               >
@@ -1197,110 +1368,136 @@ export default function App() {
 
           {/* Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-            {menuData[activeCategory].map((item, i) => (
-              <div key={i} className="bb-card" style={card}>
-                <div
-                  style={{
-                    height: 200,
-                    overflow: 'hidden',
-                    background: '#1a1a1a',
-                  }}
-                >
-                  <img
-                    src={categoryImages[activeCategory]}
-                    alt={item.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                    loading="lazy"
-                  />
-                </div>
-                <div style={{ padding: '20px 22px' }}>
+            {menuData[activeCategory].map((item, i) => {
+              const sizeOpts = getSizeOptions(activeCategory, item.price);
+              const cardKey = `${activeCategory}__${item.name}`;
+              const chosenSize = selectedSizes[cardKey] ?? '';
+
+              return (
+                <div key={i} className="bb-card" style={card}>
                   <div
                     style={{
-                      color: '#ffb703',
-                      fontSize: 10,
-                      letterSpacing: 3,
-                      fontWeight: 700,
-                      marginBottom: 6,
+                      height: 200,
+                      overflow: 'hidden',
+                      background: '#1a1a1a',
                     }}
                   >
-                    {activeCategory.toUpperCase()}
-                  </div>
-                  <h5
-                    style={{
-                      fontSize: 17,
-                      fontWeight: 700,
-                      margin: '0 0 8px 0',
-                    }}
-                  >
-                    {item.name}
-                  </h5>
-                  {activeCategory === 'Classic Pizzas' ||
-                  activeCategory === 'Special Pizzas' ? (
-                    <div
+                    <img
+                      src={categoryImages[activeCategory]}
+                      alt={item.name}
                       style={{
-                        display: 'flex',
-                        gap: 8,
-                        flexWrap: 'wrap',
-                        marginBottom: 18,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
                       }}
-                    >
-                      {item.price.split('/').map((price, i) => {
-                        const labels = ['S', 'M', 'L', 'XL'];
-
-                        return (
-                          <div
-                            key={i}
-                            style={{
-                              background: '#111',
-                              border: '1px solid rgba(255,255,255,0.1)',
-                              borderRadius: '999px',
-                              padding: '8px 16px',
-                              color: '#ffb703',
-                              fontWeight: 700,
-                              fontSize: 15,
-                            }}
-                          >
-                            {labels[i]} - {price.trim()}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
+                      loading="lazy"
+                    />
+                  </div>
+                  <div style={{ padding: '20px 22px' }}>
                     <div
                       style={{
                         color: '#ffb703',
-                        fontSize: 18,
+                        fontSize: 10,
+                        letterSpacing: 3,
                         fontWeight: 700,
-                        marginBottom: 14,
+                        marginBottom: 6,
                       }}
                     >
-                      Rs {item.price}
+                      {activeCategory.toUpperCase()}
                     </div>
-                  )}
-                  <a
-                    href={WHATSAPP}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="bb-btn"
-                    style={{
-                      ...btnRed,
-                      width: '100%',
-                      textDecoration: 'none',
-                      fontSize: 13,
-                      padding: '11px 16px',
-                      gap: 6,
-                    }}
-                  >
-                    <ShoppingBag size={14} /> Order Now
-                  </a>
+                    <h5
+                      style={{
+                        fontSize: 17,
+                        fontWeight: 700,
+                        margin: '0 0 8px 0',
+                      }}
+                    >
+                      {item.name}
+                    </h5>
+
+                    {/* ── SIZE SELECTOR (Pizza / Fries / Pasta) ── */}
+                    {sizeOpts ? (
+                      <div style={{ marginBottom: 14 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            gap: 6,
+                            flexWrap: 'wrap',
+                            marginBottom: 10,
+                          }}
+                        >
+                          {sizeOpts.map((opt) => (
+                            <button
+                              key={opt.label}
+                              onClick={() =>
+                                setSelectedSizes((prev) => ({
+                                  ...prev,
+                                  [cardKey]: opt.label,
+                                }))
+                              }
+                              style={{
+                                padding: '7px 13px',
+                                borderRadius: 999,
+                                border: '1px solid',
+                                borderColor:
+                                  chosenSize === opt.label
+                                    ? '#ff2b3d'
+                                    : 'rgba(255,255,255,0.12)',
+                                background:
+                                  chosenSize === opt.label
+                                    ? 'rgba(255,43,61,0.18)'
+                                    : '#111',
+                                color:
+                                  chosenSize === opt.label ? '#fff' : '#ffb703',
+                                fontWeight: 700,
+                                fontSize: 13,
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                fontFamily: 'inherit',
+                              }}
+                            >
+                              {opt.label} — Rs {opt.price.toLocaleString()}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          color: '#ffb703',
+                          fontSize: 18,
+                          fontWeight: 700,
+                          marginBottom: 14,
+                        }}
+                      >
+                        {item.price.startsWith('Rs')
+                          ? item.price
+                          : `Rs ${item.price}`}
+                      </div>
+                    )}
+
+                    {/* ── ADD TO CART BUTTON ── */}
+                    <button
+                      className="bb-btn"
+                      onClick={() =>
+                        addToCart(activeCategory, item.name, item.price)
+                      }
+                      style={{
+                        ...btnRed,
+                        width: '100%',
+                        fontSize: 13,
+                        padding: '11px 16px',
+                        gap: 6,
+                        border: 'none',
+                      }}
+                    >
+                      <ShoppingBag size={14} /> Add to Cart
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -1316,103 +1513,159 @@ export default function App() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {bestSellers.map((item, i) => (
-              <div
-                key={i}
-                className="bb-card"
-                style={{ ...card, position: 'relative' }}
-              >
+            {bestSellers.map((item, i) => {
+              const sizeOpts = getSizeOptions(
+                item.cartCategory,
+                item.cartPrice,
+              );
+              const cardKey = `bs__${item.name}`;
+              const chosenSize = selectedSizes[cardKey] ?? '';
+
+              return (
                 <div
-                  style={{
-                    height: 220,
-                    overflow: 'hidden',
-                    background: '#1a1a1a',
-                    position: 'relative',
-                  }}
+                  key={i}
+                  className="bb-card"
+                  style={{ ...card, position: 'relative' }}
                 >
-                  <img
-                    src={item.img}
-                    alt={item.name}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                    loading="lazy"
-                  />
+                  {/* Image */}
                   <div
                     style={{
-                      position: 'absolute',
-                      top: 14,
-                      right: 14,
-                      background: '#ff2b3d',
-                      color: '#fff',
-                      borderRadius: 999,
-                      padding: '5px 13px',
-                      fontWeight: 700,
-                      fontSize: 11,
-                      letterSpacing: 1,
+                      height: 220,
+                      overflow: 'hidden',
+                      background: '#1a1a1a',
+                      position: 'relative',
                     }}
                   >
-                    BEST SELLER
-                  </div>
-                </div>
-                <div style={{ padding: '24px 26px' }}>
-                  <h4
-                    style={{
-                      fontSize: 19,
-                      fontWeight: 700,
-                      margin: '0 0 8px 0',
-                    }}
-                  >
-                    {item.name}
-                  </h4>
-                  <p
-                    style={{
-                      color: '#9e9e9e',
-                      fontSize: 14,
-                      lineHeight: 1.7,
-                      margin: '0 0 18px 0',
-                    }}
-                  >
-                    {item.desc}
-                  </p>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 12,
-                    }}
-                  >
-                    <span
+                    <img
+                      src={item.img}
+                      alt={item.name}
                       style={{
-                        color: '#ffb703',
-                        fontSize: 22,
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                      loading="lazy"
+                    />
+                    <div
+                      style={{
+                        position: 'absolute',
+                        top: 14,
+                        right: 14,
+                        background: '#ff2b3d',
+                        color: '#fff',
+                        borderRadius: 999,
+                        padding: '5px 13px',
                         fontWeight: 700,
+                        fontSize: 11,
+                        letterSpacing: 1,
                       }}
                     >
-                      {item.price}
-                    </span>
-                    <a
-                      href={WHATSAPP}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      BEST SELLER
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div style={{ padding: '24px 26px' }}>
+                    <h4
+                      style={{
+                        fontSize: 19,
+                        fontWeight: 700,
+                        margin: '0 0 8px 0',
+                      }}
+                    >
+                      {item.name}
+                    </h4>
+                    <p
+                      style={{
+                        color: '#9e9e9e',
+                        fontSize: 14,
+                        lineHeight: 1.7,
+                        margin: '0 0 14px 0',
+                      }}
+                    >
+                      {item.desc}
+                    </p>
+
+                    {/* Size selector for Pizza / Fries */}
+                    {sizeOpts ? (
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: 6,
+                          flexWrap: 'wrap',
+                          marginBottom: 14,
+                        }}
+                      >
+                        {sizeOpts.map((opt) => (
+                          <button
+                            key={opt.label}
+                            onClick={() =>
+                              setSelectedSizes((prev) => ({
+                                ...prev,
+                                [cardKey]: opt.label,
+                              }))
+                            }
+                            style={{
+                              padding: '7px 13px',
+                              borderRadius: 999,
+                              border: '1px solid',
+                              borderColor:
+                                chosenSize === opt.label
+                                  ? '#ff2b3d'
+                                  : 'rgba(255,255,255,0.12)',
+                              background:
+                                chosenSize === opt.label
+                                  ? 'rgba(255,43,61,0.18)'
+                                  : '#111',
+                              color:
+                                chosenSize === opt.label ? '#fff' : '#ffb703',
+                              fontWeight: 700,
+                              fontSize: 13,
+                              cursor: 'pointer',
+                              transition: 'all 0.2s ease',
+                              fontFamily: 'inherit',
+                            }}
+                          >
+                            {opt.label} — Rs {opt.price.toLocaleString()}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          color: '#ffb703',
+                          fontSize: 22,
+                          fontWeight: 700,
+                          marginBottom: 14,
+                        }}
+                      >
+                        {item.price}
+                      </div>
+                    )}
+
+                    {/* Add to Cart button */}
+                    <button
                       className="bb-btn"
+                      onClick={() =>
+                        addToCart(item.cartCategory, item.name, item.cartPrice)
+                      }
                       style={{
                         ...btnRed,
-                        textDecoration: 'none',
+                        width: '100%',
                         fontSize: 13,
                         padding: '11px 20px',
+                        gap: 8,
+                        border: 'none',
+                        justifyContent: 'center',
                       }}
                     >
-                      Order
-                    </a>
+                      <ShoppingBag size={14} /> Add to Cart
+                    </button>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>
@@ -1476,7 +1729,323 @@ export default function App() {
         </div>
       </section>
 
-      {/* ── GALLERY ── */}
+      {/* ── About US ── */}
+
+      <section
+        id="about"
+        style={{
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: '70px 24px',
+        }}
+      >
+        {/* TOP CONTENT */}
+
+        <div
+          style={{
+            textAlign: 'center',
+            marginBottom: '35px',
+          }}
+        >
+          <span
+            style={{
+              color: '#ffcc33',
+              fontSize: '14px',
+              letterSpacing: '4px',
+              textTransform: 'uppercase',
+              fontWeight: 600,
+            }}
+          >
+            About Big Bite
+          </span>
+
+          <h2
+            style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 'clamp(38px, 5vw, 70px)',
+              lineHeight: 0.95,
+              margin: '20px 0',
+              letterSpacing: '-2px',
+            }}
+          >
+            MORE THAN JUST
+            <br />
+            <span
+              style={{
+                color: '#ff2b3d',
+                textShadow: '0 0 30px rgba(255,43,61,.35)',
+              }}
+            >
+              FAST FOOD
+            </span>
+          </h2>
+
+          <p
+            style={{
+              maxWidth: '900px',
+              margin: '0 auto',
+              color: 'rgba(255,255,255,.65)',
+              fontSize: '18px',
+              lineHeight: 1.9,
+            }}
+          >
+            Big Bite delivers premium burgers, pizzas, shawarmas and loaded fast
+            food crafted fresh every day with quality ingredients and
+            unforgettable flavor.
+          </p>
+        </div>
+
+        {/* GRID */}
+
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(450px,1fr))',
+            gap: '30px',
+            alignItems: 'stretch',
+          }}
+        >
+          {/* LEFT IMAGE */}
+
+          <div
+            style={{
+              position: 'relative',
+              borderRadius: '32px',
+              overflow: 'hidden',
+              minHeight: '520px',
+            }}
+          >
+            <img
+              src="/about.jpg"
+              alt="Big Bite"
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+            />
+
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                background:
+                  'linear-gradient(to top, rgba(0,0,0,.9), rgba(0,0,0,.15))',
+              }}
+            />
+
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '25px',
+                left: '35px',
+                right: '35px',
+              }}
+            >
+              <span
+                style={{
+                  background: 'rgba(255,255,255,.12)',
+                  padding: '10px 22px',
+                  borderRadius: '999px',
+                  fontSize: '13px',
+                  letterSpacing: '2px',
+                }}
+              >
+                Big Bite Experience
+              </span>
+
+              <h3
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: 'clamp(40px,4vw,65px)',
+                  lineHeight: '.9',
+                  margin: '20px 0',
+                }}
+              >
+                TASTE THE
+                <br />
+                <span style={{ color: '#ff2b3d' }}>DIFFERENCE</span>
+              </h3>
+
+              <p
+                style={{
+                  color: 'rgba(255,255,255,.8)',
+                  lineHeight: 1.8,
+                  maxWidth: '500px',
+                }}
+              >
+                A comfortable dine-in experience, delicious meals and
+                unforgettable moments for friends and families.
+              </p>
+            </div>
+          </div>
+
+          {/* RIGHT CARD */}
+
+          <div
+            style={{
+              background: 'linear-gradient(135deg,#090909,#040404)',
+              border: '1px solid rgba(255,255,255,.06)',
+              borderRadius: '32px',
+              padding: '35px',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  display: 'inline-block',
+                  background: 'rgba(255,43,61,.12)',
+                  border: '1px solid rgba(255,43,61,.2)',
+                  color: '#ffcc33',
+                  padding: '10px 22px',
+                  borderRadius: '999px',
+                  fontSize: '13px',
+                  letterSpacing: '2px',
+                  marginBottom: '30px',
+                }}
+              >
+                Local Favorite Spot
+              </span>
+
+              <h3
+                style={{
+                  fontFamily: "'Bebas Neue', sans-serif",
+                  fontSize: 'clamp(40px,4vw,65px)',
+                  lineHeight: '.9',
+                  marginBottom: '25px',
+                }}
+              >
+                GOOD FOOD
+                <br />
+                <span style={{ color: '#ff2b3d' }}>DONE RIGHT</span>
+              </h3>
+
+              <p
+                style={{
+                  color: 'rgba(255,255,255,.75)',
+                  lineHeight: 2,
+                  fontSize: '18px',
+                }}
+              >
+                From cheesy pizzas to juicy burgers and signature shawarmas, Big
+                Bite brings fresh ingredients, quick service and unforgettable
+                taste together.
+              </p>
+
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2,1fr)',
+                  gap: '20px',
+                  marginTop: '40px',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '25px',
+                    borderRadius: '24px',
+                    background: 'rgba(255,255,255,.03)',
+                  }}
+                >
+                  <h4
+                    style={{
+                      color: '#ffcc33',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    📍 Location
+                  </h4>
+
+                  <a
+                    href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z"
+                    target="_blank"
+                    rel="noreferrer"
+                    style={{
+                      color: '#fff',
+                      textDecoration: 'none',
+                      lineHeight: 1.8,
+                    }}
+                  >
+                    Main Bazar Mansoorabad, Faisalabad
+                  </a>
+                </div>
+
+                <div
+                  style={{
+                    padding: '25px',
+                    borderRadius: '24px',
+                    background: 'rgba(255,255,255,.03)',
+                  }}
+                >
+                  <h4
+                    style={{
+                      color: '#ffcc33',
+                      marginBottom: '12px',
+                    }}
+                  >
+                    📞 Contact
+                  </h4>
+
+                  <p
+                    style={{
+                      margin: 0,
+                      lineHeight: 1.8,
+                      color: 'rgba(255,255,255,.75)',
+                    }}
+                  >
+                    0313-7788169
+                    <br />
+                    0303-5555845
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '18px',
+                marginTop: '45px',
+                flexWrap: 'wrap',
+              }}
+            >
+              <a
+                href="#menu"
+                className="bb-btn"
+                style={{
+                  textDecoration: 'none',
+                  padding: '18px 34px',
+                  borderRadius: '999px',
+                  background: '#ff2b3d',
+                  color: '#fff',
+                  fontWeight: 700,
+                }}
+              >
+                Explore Menu
+              </a>
+
+              <a
+                href="https://wa.me/923137788169"
+                target="_blank"
+                rel="noreferrer"
+                style={{
+                  textDecoration: 'none',
+                  padding: '18px 34px',
+                  borderRadius: '999px',
+                  border: '1px solid rgba(255,255,255,.1)',
+                  color: '#fff',
+                }}
+              >
+                WhatsApp Us
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ── GALLERY ── */}
       <section style={{ padding: '10px 0' }}>
         <div style={wrap}>
@@ -1591,57 +2160,152 @@ export default function App() {
       </section>
 
       {/* ── CTA ── */}
-      <section style={{ padding: '60px 0 80px' }}>
-        <div style={wrap}>
-          <div
+      <section
+        id="order"
+        style={{
+          maxWidth: '1400px',
+          margin: '120px auto',
+          padding: '0 24px',
+        }}
+      >
+        <div
+          style={{
+            position: 'relative',
+            overflow: 'hidden',
+            borderRadius: '40px',
+            padding: '120px 40px',
+            textAlign: 'center',
+            background:
+              'radial-gradient(circle at center, rgba(255,43,61,0.22), #050505 65%)',
+            border: '1px solid rgba(255,255,255,0.05)',
+          }}
+        >
+          {/* TOP BADGE */}
+
+          <span
             style={{
-              background: 'linear-gradient(135deg, #e8001b, #7a0010)',
-              borderRadius: 44,
-              padding: '80px 40px',
-              textAlign: 'center',
+              display: 'inline-block',
+              padding: '12px 28px',
+              borderRadius: '999px',
+              background: 'rgba(255,43,61,.12)',
+              border: '1px solid rgba(255,43,61,.25)',
+              color: '#ffcc33',
+              fontSize: '13px',
+              letterSpacing: '3px',
+              textTransform: 'uppercase',
             }}
           >
-            <h2
+            Ready To Order?
+          </span>
+
+          {/* HEADING */}
+
+          <h2
+            style={{
+              fontFamily: "'Bebas Neue', sans-serif",
+              fontSize: 'clamp(40px,4vw,65px)',
+              lineHeight: '.9',
+              margin: '35px 0 25px',
+            }}
+          >
+            TASTE THE
+            <br />
+            <span
               style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: 'clamp(56px, 7vw, 110px)',
-                margin: 0,
-                lineHeight: 1,
-                fontWeight: 400,
+                color: '#ff2b3d',
+                textShadow: '0 0 35px rgba(255,43,61,.35)',
               }}
             >
-              ORDER NOW
-            </h2>
-            <p
-              style={{
-                maxWidth: 580,
-                margin: '16px auto 34px',
-                fontSize: 17,
-                color: 'rgba(255,255,255,0.8)',
-                lineHeight: 1.7,
-              }}
-            >
-              Fresh. Fast. Delicious. Delivered straight to your doorstep — any
-              time, any day.
-            </p>
+              DIFFERENCE
+            </span>
+          </h2>
+
+          {/* TEXT */}
+
+          <p
+            style={{
+              maxWidth: '700px',
+              margin: '0 auto',
+              color: 'rgba(255,255,255,.75)',
+              fontSize: '20px',
+              lineHeight: 1.8,
+            }}
+          >
+            Fresh burgers, loaded pizzas, shawarmas and unforgettable flavor
+            delivered straight to your doorstep.
+          </p>
+
+          {/* BUTTONS */}
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '18px',
+              flexWrap: 'wrap',
+              marginTop: '45px',
+            }}
+          >
             <a
-              href={WHATSAPP}
+              href="https://wa.me/923137788169"
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noreferrer"
+              className="bb-btn"
               style={{
-                background: '#fff',
-                color: '#cc0015',
-                padding: '16px 40px',
-                borderRadius: 999,
-                fontWeight: 800,
                 textDecoration: 'none',
-                display: 'inline-flex',
-                fontSize: 16,
-                transition: 'transform 0.3s ease',
-                boxShadow: '0 10px 40px rgba(0,0,0,0.25)',
+                padding: '18px 38px',
+                borderRadius: '999px',
+                background: '#ff2b3d',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '17px',
               }}
             >
-              Order On WhatsApp
+              Whatsapp Now
+            </a>
+
+            {/* <a
+              href="tel:03137788169"
+              style={{
+                textDecoration: 'none',
+                padding: '18px 38px',
+                borderRadius: '999px',
+                background: '#fff',
+                color: '#111',
+                fontWeight: 700,
+                fontSize: '17px',
+              }}
+            >
+              Call Us
+            </a> */}
+          </div>
+
+          {/* BOTTOM INFO */}
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '40px',
+              flexWrap: 'wrap',
+              marginTop: '55px',
+              color: 'rgba(255,255,255,.7)',
+            }}
+          >
+            <span>📞 0313-7788169</span>
+
+            <span>🕒 Open Daily: 12 PM - 2 AM</span>
+
+            <a
+              href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z"
+              target="_blank"
+              rel="noreferrer"
+              style={{
+                color: '#ffcc33',
+                textDecoration: 'none',
+              }}
+            >
+              📍 Locate Us
             </a>
           </div>
         </div>
@@ -1649,59 +2313,685 @@ export default function App() {
 
       {/* ── FOOTER ── */}
       <footer
-        id="contact"
         style={{
-          padding: '60px 0 40px',
-          borderTop: '1px solid rgba(255,255,255,0.07)',
+          maxWidth: '1400px',
+          margin: '0 auto',
+          padding: '100px 24px 40px',
         }}
       >
-        <div style={{ ...wrap, textAlign: 'center' }}>
-          <h3
-            style={{
-              fontFamily: "'Bebas Neue', sans-serif",
-              color: '#ff2b3d',
-              fontSize: 50,
-              margin: '0 0 14px 0',
-              fontWeight: 400,
-            }}
-          >
-            BIGBITE
-          </h3>
-          <p style={{ color: '#777', fontSize: 14, marginBottom: 6 }}>
-            Near Main Bazar Mansoorabad Jhumrah Road, 1st Floor Travel Must,
-            Faisalabad
-          </p>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))',
+            gap: '50px',
+            paddingBottom: '50px',
+            borderBottom: '1px solid rgba(255,255,255,.06)',
+          }}
+        >
+          {/* BRAND */}
+
+          <div>
+            <h2
+              style={{
+                color: '#ff2b3d',
+                fontFamily: "'Bebas Neue', sans-serif",
+                fontSize: '52px',
+                marginBottom: '20px',
+              }}
+            >
+              BIGBITE
+            </h2>
+
+            <p
+              style={{
+                color: 'rgba(255,255,255,.65)',
+                lineHeight: 2,
+              }}
+            >
+              Premium fast food experience. Big bites, bigger vibes and
+              unforgettable flavor.
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '12px',
+                marginTop: '25px',
+              }}
+            >
+              <a href="#" style={socialStyle}>
+                <FaFacebookF />
+              </a>
+
+              <a href="#" style={socialStyle}>
+                <FaInstagram />
+              </a>
+
+              <a href="#" style={socialStyle}>
+                <FaTiktok />
+              </a>
+
+              <a
+                href="https://bigbite-tau.vercel.app"
+                target="_blank"
+                rel="noreferrer"
+                style={socialStyle}
+              >
+                <FaGlobe />
+              </a>
+            </div>
+          </div>
+
+          {/* QUICK LINKS */}
+
+          <div>
+            <h3
+              style={{
+                marginBottom: '20px',
+                color: '#fff',
+              }}
+            >
+              Quick Links
+            </h3>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '14px',
+              }}
+            >
+              <a href="#menu" style={footerLink}>
+                Menu
+              </a>
+
+              <a href="#about" style={footerLink}>
+                About Us
+              </a>
+
+              <a href="#reviews" style={footerLink}>
+                Reviews
+              </a>
+
+              <a href="#order" style={footerLink}>
+                Order Now
+              </a>
+            </div>
+          </div>
+
+          {/* CONTACT */}
+
+          <div>
+            <h3
+              style={{
+                marginBottom: '20px',
+                color: '#fff',
+              }}
+            >
+              Contact
+            </h3>
+
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '18px',
+                color: 'rgba(255,255,255,.7)',
+              }}
+            >
+              <a
+                href="https://www.google.com/maps/place/BIG+BITE/@31.4363317,73.1128357,17z"
+                target="_blank"
+                rel="noreferrer"
+                style={footerLink}
+              >
+                📍 Near Main Bazar Mansoorabad, Faisalabad
+              </a>
+
+              <a href="tel:03137788169" style={footerLink}>
+                📞 0313-7788169
+              </a>
+
+              <a href="tel:03035555845" style={footerLink}>
+                📞 0303-5555845
+              </a>
+
+              <a href="mailto:hello@bigbite.com" style={footerLink}>
+                ✉ hello@bigbite.com
+              </a>
+            </div>
+          </div>
+
+          {/* NEWSLETTER */}
+
+          <div>
+            <h3
+              style={{
+                marginBottom: '20px',
+                color: '#fff',
+              }}
+            >
+              Newsletter
+            </h3>
+
+            <p
+              style={{
+                color: 'rgba(255,255,255,.65)',
+                lineHeight: 1.8,
+                marginBottom: '20px',
+              }}
+            >
+              Subscribe for exclusive deals and updates.
+            </p>
+
+            <div
+              style={{
+                display: 'flex',
+                gap: '10px',
+              }}
+            >
+              <input
+                placeholder="Your email"
+                style={{
+                  flex: 1,
+                  background: '#111',
+                  border: '1px solid rgba(255,255,255,.08)',
+                  color: '#fff',
+                  padding: '16px',
+                  borderRadius: '999px',
+                  outline: 'none',
+                }}
+              />
+
+              <button
+                className="bb-btn"
+                style={{
+                  border: 'none',
+                  padding: '16px 28px',
+                  borderRadius: '999px',
+                  background: '#ff2b3d',
+                  color: '#fff',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* BOTTOM */}
+
+        <div
+          style={{
+            marginTop: '35px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: '20px',
+            color: 'rgba(255,255,255,.45)',
+          }}
+        >
+          <span>© 2026 Big Bite. All rights reserved.</span>
 
           <div
             style={{
               display: 'flex',
-              gap: 24,
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-              margin: '22px 0',
-              color: '#888',
-              fontSize: 14,
+              gap: '25px',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <Phone size={14} style={{ color: '#ff2b3d' }} />
-              <span>0313-7788169 &nbsp;|&nbsp; 0303-5555845</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <Clock size={14} style={{ color: '#ff2b3d' }} />
-              <span>12:00 PM – 2:00 AM</span>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-              <MapPin size={14} style={{ color: '#ff2b3d' }} />
-              <span>Faisalabad • Mansoorabad</span>
-            </div>
+            <span>Privacy Policy</span>
+            <span>Terms of Service</span>
+            <span>Cookie Policy</span>
           </div>
-
-          <p style={{ color: 'rgba(255,255,255,0.2)', fontSize: 13 }}>
-            © 2026 BigBite. All Rights Reserved.
-          </p>
         </div>
       </footer>
+      {/* ── FLOATING CART BUTTON (above WhatsApp) ── */}
+      <button
+        onClick={() => setCartOpen(true)}
+        style={{
+          position: 'fixed',
+          bottom: '115px',
+          right: '25px',
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          background: 'linear-gradient(135deg, #ff2b3d, #b50018)',
+          border: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontSize: '24px',
+          cursor: 'pointer',
+          zIndex: 9998,
+          boxShadow: '0 0 25px rgba(255,43,61,0.5)',
+          transition: 'all .3s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.1)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        <ShoppingBag size={24} />
+        {cartCount > 0 && (
+          <span
+            style={{
+              position: 'absolute',
+              top: '-4px',
+              right: '-4px',
+              background: '#ffb703',
+              color: '#111',
+              borderRadius: '50%',
+              width: '22px',
+              height: '22px',
+              fontSize: '11px',
+              fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              lineHeight: 1,
+            }}
+          >
+            {cartCount}
+          </span>
+        )}
+      </button>
+
+      {/* ── CART DRAWER ── */}
+      {cartOpen && (
+        <>
+          {/* Backdrop */}
+          <div
+            onClick={() => setCartOpen(false)}
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.7)',
+              zIndex: 10000,
+              backdropFilter: 'blur(4px)',
+            }}
+          />
+
+          {/* Drawer */}
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              width: '100%',
+              maxWidth: '440px',
+              background: '#0e0e0e',
+              border: '1px solid rgba(255,255,255,0.08)',
+              borderRight: 'none',
+              zIndex: 10001,
+              display: 'flex',
+              flexDirection: 'column',
+              overflowY: 'auto',
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '24px 24px 20px',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <ShoppingBag size={20} style={{ color: '#ff2b3d' }} />
+                <span
+                  style={{
+                    fontFamily: "'Bebas Neue', sans-serif",
+                    fontSize: 24,
+                    letterSpacing: 1,
+                  }}
+                >
+                  YOUR CART
+                </span>
+                {cartCount > 0 && (
+                  <span
+                    style={{
+                      background: '#ff2b3d',
+                      color: '#fff',
+                      borderRadius: 999,
+                      padding: '2px 10px',
+                      fontSize: 12,
+                      fontWeight: 700,
+                    }}
+                  >
+                    {cartCount} items
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={() => setCartOpen(false)}
+                style={{
+                  background: 'rgba(255,255,255,0.06)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: '#fff',
+                  borderRadius: '50%',
+                  width: 36,
+                  height: 36,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Cart Items */}
+            <div style={{ flex: 1, padding: '16px 24px', overflowY: 'auto' }}>
+              {cart.length === 0 ? (
+                <div
+                  style={{
+                    textAlign: 'center',
+                    padding: '80px 0',
+                    color: 'rgba(255,255,255,0.35)',
+                  }}
+                >
+                  <ShoppingBag
+                    size={48}
+                    style={{
+                      margin: '0 auto 16px',
+                      display: 'block',
+                      opacity: 0.3,
+                    }}
+                  />
+                  <p style={{ fontSize: 16 }}>Your cart is empty</p>
+                  <p style={{ fontSize: 13, marginTop: 8 }}>
+                    Add items from the menu above
+                  </p>
+                </div>
+              ) : (
+                <div
+                  style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+                >
+                  {cart.map((item) => (
+                    <div
+                      key={item.id}
+                      style={{
+                        background: '#121212',
+                        border: '1px solid rgba(255,255,255,0.07)',
+                        borderRadius: 16,
+                        padding: '16px 18px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 10,
+                      }}
+                    >
+                      {/* Item name + remove */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'flex-start',
+                          gap: 8,
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 15 }}>
+                            {item.name}
+                            {item.size && (
+                              <span
+                                style={{
+                                  marginLeft: 8,
+                                  background: 'rgba(255,183,3,0.12)',
+                                  border: '1px solid rgba(255,183,3,0.25)',
+                                  color: '#ffb703',
+                                  borderRadius: 999,
+                                  padding: '2px 9px',
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                }}
+                              >
+                                {item.size}
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: 12,
+                              color: 'rgba(255,255,255,0.4)',
+                              marginTop: 3,
+                            }}
+                          >
+                            {item.category}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => removeItem(item.id)}
+                          style={{
+                            background: 'rgba(255,43,61,0.1)',
+                            border: '1px solid rgba(255,43,61,0.2)',
+                            color: '#ff2b3d',
+                            borderRadius: '50%',
+                            width: 28,
+                            height: 28,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            flexShrink: 0,
+                          }}
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+
+                      {/* Price row */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                        }}
+                      >
+                        {/* Qty controls */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0,
+                            background: '#1a1a1a',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: 999,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <button
+                            onClick={() => changeQty(item.id, -1)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#fff',
+                              width: 34,
+                              height: 34,
+                              cursor: 'pointer',
+                              fontSize: 18,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            −
+                          </button>
+                          <span
+                            style={{
+                              fontWeight: 700,
+                              fontSize: 14,
+                              minWidth: 24,
+                              textAlign: 'center',
+                            }}
+                          >
+                            {item.qty}
+                          </span>
+                          <button
+                            onClick={() => changeQty(item.id, 1)}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              color: '#fff',
+                              width: 34,
+                              height: 34,
+                              cursor: 'pointer',
+                              fontSize: 18,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Subtotal */}
+                        <div style={{ textAlign: 'right' }}>
+                          <div
+                            style={{
+                              fontSize: 11,
+                              color: 'rgba(255,255,255,0.4)',
+                            }}
+                          >
+                            Rs {item.price.toLocaleString()} × {item.qty}
+                          </div>
+                          <div
+                            style={{
+                              fontWeight: 700,
+                              color: '#ffb703',
+                              fontSize: 16,
+                            }}
+                          >
+                            Rs {(item.price * item.qty).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer with total + WhatsApp button */}
+            {cart.length > 0 && (
+              <div
+                style={{
+                  padding: '20px 24px 28px',
+                  borderTop: '1px solid rgba(255,255,255,0.07)',
+                  background: '#0a0a0a',
+                }}
+              >
+                {/* Total */}
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 18,
+                    padding: '14px 18px',
+                    background: 'rgba(255,255,255,0.03)',
+                    borderRadius: 14,
+                    border: '1px solid rgba(255,255,255,0.07)',
+                  }}
+                >
+                  <span style={{ fontWeight: 700, fontSize: 15 }}>
+                    Total Amount
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "'Bebas Neue', sans-serif",
+                      fontSize: 26,
+                      color: '#ffb703',
+                      letterSpacing: 1,
+                    }}
+                  >
+                    Rs {cartTotal.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Order on WhatsApp */}
+                <button
+                  className="bb-btn"
+                  onClick={orderOnWhatsApp}
+                  style={{
+                    ...btnRed,
+                    width: '100%',
+                    fontSize: 15,
+                    padding: '16px',
+                    gap: 10,
+                    border: 'none',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <FaWhatsapp style={{ fontSize: 18 }} />
+                  Order on WhatsApp
+                </button>
+
+                <button
+                  onClick={() => setCart([])}
+                  style={{
+                    width: '100%',
+                    marginTop: 10,
+                    background: 'none',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    color: 'rgba(255,255,255,0.4)',
+                    borderRadius: 999,
+                    padding: '10px',
+                    cursor: 'pointer',
+                    fontSize: 13,
+                    fontFamily: 'inherit',
+                    transition: 'all 0.2s ease',
+                  }}
+                >
+                  Clear Cart
+                </button>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* Floating WhatsApp Button */}
+      <a
+        href="https://wa.me/923137788169"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          position: 'fixed',
+          bottom: '25px',
+          right: '25px',
+          width: '80px',
+          height: '75px',
+          borderRadius: '50%',
+          background: '#25D366',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#fff',
+          fontSize: '50px',
+          textDecoration: 'none',
+          zIndex: 9999,
+          boxShadow: '0 0 25px rgba(37,211,102,.5)',
+          transition: 'all .3s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.1)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
+      >
+        <FaWhatsapp />
+      </a>
     </div>
   );
 }
