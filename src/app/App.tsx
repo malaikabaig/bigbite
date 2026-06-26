@@ -15,7 +15,8 @@ import {
   ShoppingBag,
   CheckCircle2,
 } from 'lucide-react';
-import deliveryVideo from '../imports/delivery.mp4';
+import Logo from '../../public/assets/images/logo.png';
+import deliveryVideo from '../../public/assets/videos/deliveryvideo.mp4';
 import {
   FaFacebookF,
   FaInstagram,
@@ -695,19 +696,35 @@ export default function App() {
               gap: 20,
             }}
           >
-            <span
-              style={{
-                fontFamily: "'Bebas Neue', sans-serif",
-                fontSize: 36,
-                color: '#ff2b3d',
-                letterSpacing: 1,
-                lineHeight: 1,
-                cursor: 'pointer',
-              }}
+            <button
+              type="button"
               onClick={() => scrollTo('home')}
+              aria-label="Go to Big Bite home"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0,
+              }}
             >
-              BIGBITE
-            </span>
+              <img
+                src={Logo}
+                alt="Big Bite"
+                style={{
+                  height: scrolled ? 44 : 54,
+                  width: 'auto',
+                  maxWidth: 165,
+                  objectFit: 'contain',
+                  display: 'block',
+                  transition: 'height 0.4s ease',
+                  filter: 'drop-shadow(0 0 12px rgba(255,43,61,0.22))',
+                }}
+              />
+            </button>
 
             <ul
               style={{ gap: 4, listStyle: 'none', margin: 0, padding: 0 }}
@@ -959,7 +976,7 @@ export default function App() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                minHeight: 560,
+                minHeight: 700,
               }}
             >
               <video
@@ -979,7 +996,37 @@ export default function App() {
               >
                 <source src={deliveryVideo} type="video/mp4" />
               </video>
-
+              <div
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  marginTop: '50 px',
+                  bottom: 22,
+                  transform: 'translateX(-50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  width: 'max-content',
+                  maxWidth: '90%',
+                  padding: '12px 18px',
+                  borderRadius: 999,
+                  background: 'rgba(18,18,18,0.82)',
+                  border: '1px solid rgba(255,255,255,0.10)',
+                  backdropFilter: 'blur(18px)',
+                  color: 'rgba(255,255,255,0.82)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  lineHeight: 1.4,
+                  textAlign: 'center',
+                  boxShadow: '0 12px 35px rgba(0,0,0,0.35)',
+                }}
+              >
+                <MapPin size={15} style={{ color: '#ffb703', flexShrink: 0 }} />
+                <span>
+                  Delivering across Mansoorabad, Kashmir Road, Gulistan Colony &
+                  Millat Road
+                </span>
+              </div>
               <div
                 className="hidden lg:flex"
                 style={{
@@ -1826,7 +1873,7 @@ export default function App() {
             }}
           >
             <img
-              src="/about.jpg"
+              src="../../public/assets/images/about.jpg"
               alt="Big Bite"
               style={{
                 width: '100%',
@@ -2369,15 +2416,24 @@ export default function App() {
                 marginTop: '25px',
               }}
             >
-              <a href="#" style={socialStyle}>
+              <a
+                href="https://www.facebook.com/Bigbitefsd/"
+                style={socialStyle}
+              >
                 <FaFacebookF />
               </a>
 
-              <a href="#" style={socialStyle}>
+              <a
+                href="https://www.instagram.com/bigbite_faisalabad_official?igsh=MTJrZmFjMmU2Ym5ibA%3D%3D"
+                style={socialStyle}
+              >
                 <FaInstagram />
               </a>
 
-              <a href="#" style={socialStyle}>
+              <a
+                href="https://www.tiktok.com/@bigbite.fsd.official?_r=1&_t=ZS-97TLqkSZrBX"
+                style={socialStyle}
+              >
                 <FaTiktok />
               </a>
 
